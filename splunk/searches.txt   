@@ -1,0 +1,36 @@
+# Total Failed Logins search
+index="aws" sourcetype="_json"
+| spath input=_raw path=Records{} output=events
+| mvexpand events
+| spath input=events path=eventName output=eventName
+| spath input=events path=userIdentity.userName output=userName
+| spath input=events path=errorMessage output=errorMessage
+| spath input=events path=eventTime output=eventTime
+| search eventName="ConsoleLogin" errorMessage="Failed authentication" userName="testUser"
+| eval _time=strptime(substr(eventTime,1,20), "%Y-%m-%dT%H:%M:%S")
+| bin _time span=1m
+| stats count by _time userName
+| sort _time
+
+# Total Successful Logins
+index="aws" sourcetype="_json"
+| spath input=_raw path=Records{} output=events
+| mvexpand events
+| spath input=events path=eventName output=eventName
+| spath input=events path=userIdentity.userName output=userName
+| spath input=events path=responseElements.ConsoleLogin output=success
+| search eventName="ConsoleLogin" success="Success" userName="testUser"
+| stats count as "Total Successful Logins"
+
+# Denied Access Attempts
+index="aws" sourcetype="_json" "Records{}.errorCode"=AccessDenied 
+"Records{}.userIdentity.userName"="testUser"
+| timechart span=1h count as "Denied Access Attempts"
+
+# Activity by Country
+index="aws" sourcetype="_json"
+| spath path="Records{}.sourceIPAddress" output=src_ip
+| table src_ip
+| iplocation src_ip
+| stats count by Country
+| geom geo_countries featureIdField="Country"
